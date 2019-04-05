@@ -10,25 +10,46 @@ import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 import android.widget.TextView;
+import android.widget.Toast;
+
+import com.google.firebase.FirebaseApp;
+import com.google.firebase.database.DatabaseReference;
+import com.google.firebase.database.FirebaseDatabase;
+import com.jjoe64.graphview.GraphView;
+import com.jjoe64.graphview.series.DataPoint;
+import com.jjoe64.graphview.series.LineGraphSeries;
+
+import org.eclipse.paho.android.service.MqttAndroidClient;
+import org.eclipse.paho.client.mqttv3.IMqttActionListener;
+import org.eclipse.paho.client.mqttv3.IMqttDeliveryToken;
+import org.eclipse.paho.client.mqttv3.IMqttToken;
+import org.eclipse.paho.client.mqttv3.MqttCallback;
+import org.eclipse.paho.client.mqttv3.MqttClient;
+import org.eclipse.paho.client.mqttv3.MqttConnectOptions;
+import org.eclipse.paho.client.mqttv3.MqttException;
+import org.eclipse.paho.client.mqttv3.MqttMessage;
 
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
 
-public class MainActivity extends AppCompatActivity {
-
+public class MainActivity extends AppCompatActivity implements MqttCallback {
+    double x=-1,y;
+    GraphView graph;
     TextView Live_value;
     Button start;
     MediaRecorder my_recorder;
     Thread running_thread;
     private static double mEMA = 0.0;
     static final private double EMA_FILTER = 0.6;
+    LineGraphSeries<DataPoint> series;
 
     final  Runnable updater = new Runnable() {
         @Override
         public void run() {
             updateTv();
+            updateGraph();
         }
     };
 
@@ -39,6 +60,10 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
+        graph = findViewById(R.id.graph);
+        series = new LineGraphSeries<DataPoint>();
+
+        FirebaseApp.initializeApp(this);
         Live_value = findViewById(R.id.readings);
         start = findViewById(R.id.start);
 
@@ -120,9 +145,15 @@ public class MainActivity extends AppCompatActivity {
     public void updateTv(){
         Live_value.setText(Double.toString((soundDb(10))) + "dB");
 
+        FirebaseDatabase database = FirebaseDatabase.getInstance();
+        DatabaseReference myRef = database.getReference("message");
+        myRef.push().setValue(Double.toString((soundDb(10)))+"dB");
+
+
         String filename = "myfile";
         String fileContents = (String) Live_value.getText();
         FileOutputStream outputStream;
+
 
         try {
             outputStream = openFileOutput(filename, Context.MODE_PRIVATE);
@@ -132,6 +163,14 @@ public class MainActivity extends AppCompatActivity {
             e.printStackTrace();
         }
 
+    }
+
+    public void updateGraph(){
+
+        x=x+1;
+        y=soundDb(10);
+        series.appendData(new DataPoint(x,y), true, 50000);
+        graph.addSeries(series);
     }
 
     public double soundDb(double ampl){
@@ -150,5 +189,21 @@ public class MainActivity extends AppCompatActivity {
         double amp = getAmplitude();
         mEMA = EMA_FILTER * amp + (1.0 - EMA_FILTER) * mEMA;
         return mEMA;
+    }
+
+    @Override
+    public void connectionLost(Throwable cause) {
+
+    }
+
+    @Override
+    public void messageArrived(String topic, MqttMessage message) throws Exception {
+
+        Toast.makeText(MainActivity.this, "Topic: "+topic+"\nMessage: "+message, Toast.LENGTH_LONG).show();
+    }
+
+    @Override
+    public void deliveryComplete(IMqttDeliveryToken token) {
+
     }
 }
